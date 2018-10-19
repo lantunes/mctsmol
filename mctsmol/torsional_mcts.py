@@ -34,8 +34,8 @@ class TorsionalMCTS:
 
             # Backpropagate
             #   backpropagate from the expanded node and work back to the root node
+            energy = self._energy_function(rollout_state)
             while node is not None:
-                energy = self._energy_function(rollout_state)
                 node.visits += 1
                 node.energies.append(energy)
                 node = node.parent
@@ -46,6 +46,7 @@ class TorsionalMCTS:
 
     def _select_next_move_randomly(self):
         return np.random.choice(self._allowed_angle_values)
+
 
 class _Node:
     def __init__(self, state, num_angles, allowed_angle_values, c, parent=None):
@@ -66,13 +67,7 @@ class _Node:
         return child_states
 
     def _average_value(self):
-        # normalize the energies according to the max and min values, and subtract from 1 since negative energies
-        #  are preferable (5 is the max energy and -10 is the min energy)
-        #                  x               np.mean(x)   1 - np.mean((np.array(x) - (-10.))/(5. - (-10.)))
-        # e.g.  [-10.0, -7.3, 0.4, 3.6]    -3.325       0.55499999999999994
-        #       [-10.0, -9.5, -3.5, 0.3]   -5.674999    0.71166666666666667
-        #       [-4.0, -1.3, -0.5, 0.1]    -1.425       0.42833333333333334
-        return 1 - np.mean((np.array(self.energies) - (-10.))/(5. - (-10.))) #TODO the min and max values are hardcoded
+        return -np.mean(self.energies)
 
     def has_untried_moves(self):
         return self.untried_moves != []

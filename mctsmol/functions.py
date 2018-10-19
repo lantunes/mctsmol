@@ -1,4 +1,5 @@
 import numpy as np
+from rdkit.Chem import AllChem
 
 
 def simple_torsional_potential(angles):
@@ -11,4 +12,27 @@ def simple_torsional_potential(angles):
         sum += 1 + np.cos(np.deg2rad(angle)) + np.cos(np.deg2rad(3 * angle))
     return sum
 
-# print(simple_torsional_potential([180.0, 180.0, 180.0, 180.0, 180.0, 180.0, 180.0, 180.0, 180.0, 180.0]))
+
+def uff_potential(mol):
+    """
+    Accepts an rdkit Mol, optimizes the geometry, and returns the energy.
+    :param mol: an rdkit Mol
+    :return: the energy
+    """
+    AllChem.UFFOptimizeMolecule(mol)
+    ff = AllChem.UFFGetMoleculeForceField(mol)
+    energy = ff.CalcEnergy()
+    return energy
+
+
+def mmff94_potential(mol):
+    """
+    Accepts an rdkit Mol, optimizes the geometry, and returns the energy.
+    :param mol: an rdkit Mol
+    :return: the energy
+    """
+    mp = AllChem.MMFFGetMoleculeProperties(mol, mmffVariant="MMFF94")
+    ff = AllChem.MMFFGetMoleculeForceField(mol, mp)
+    energy = ff.CalcEnergy()
+    return energy
+
