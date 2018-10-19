@@ -5,9 +5,8 @@ if __name__ == '__main__':
     num_simulations = 100
     energy_function = mmff94_potential
 
-    mcts = MolecularMCTS(allowed_angle_values, energy_function, c=18)
+    mcts = MolecularMCTS(allowed_angle_values, energy_function, c=5)
 
-    # state = mcts.init_state("C(C)(C)CCN")
     state = mcts.init_state("c1(Cc2ccc(C#C[C@@H](N(C(N)=O)O)C)s2)ccc(F)cc1")
     num_angles = mcts.get_num_angles()
 

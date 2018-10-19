@@ -33,6 +33,7 @@ def mmff94_potential(mol):
     """
     mp = AllChem.MMFFGetMoleculeProperties(mol, mmffVariant="MMFF94")
     ff = AllChem.MMFFGetMoleculeForceField(mol, mp)
+    opt_fail = ff.Minimize(maxIts=1000,forceTol=0.0001,energyTol=1e-06)
     energy = ff.CalcEnergy()
     return energy
 
