@@ -122,7 +122,8 @@ class _Node:
         return child_states
 
     def _average_value(self):
-        return -np.mean(self.energies)
+        merit = -(np.array(self.energies) / (1 + np.abs(self.energies)))
+        return np.sum(merit) / self.visits
 
     def has_untried_moves(self):
         return self.untried_moves != []
