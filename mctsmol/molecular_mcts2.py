@@ -10,15 +10,19 @@ from rdkit.Chem import MolFromPDBFile
 import copy
 
 """
-Sequential MCTS. The state consists of the best chosen dihedrals and the optimized Mol of the chosen child
-node at the end of the search. The energy optimization at the end of the simulation starts from the optimized
-Mol from the end of the previous search.
+Sequential MCTS, but state consists only of the best chosen dihedrals; we start from the 
+initial stored Mol when computing the energy for each simulation. When optimizing and computing the energy
+during a simulation, we freeze the dihedral angle to within +/- 5 degrees.
 """
-class MolecularMCTS:
-    def __init__(self, allowed_angle_values, energy_function, c=sqrt(2)):
+class MolecularMCTS2:
+    def __init__(self, allowed_angle_values, energy_function, energy_min, energy_max, c=sqrt(2)):
         self._allowed_angle_values = allowed_angle_values
         self._energy_function = energy_function
+        self._energy_min = energy_min
+        self._energy_max = energy_max
         self._c = c
+        self._mol = None
+        self._global_minimum_energy = None
 
     def init_state(self, smiles_string):
         mol = Chem.MolFromSmiles(smiles_string)
@@ -38,14 +42,7 @@ class MolecularMCTS:
 
         self._original_smiles = self._get_smiles(mol)
         self._original_mol = mol
-        return mol, []
-
-    def get_dihedrals(self, mol):
-        conf = mol.GetConformer()
-        dihedrals = []
-        for bond in self._rotatable_bonds:
-            dihedrals.append(rdMolTransforms.GetDihedralDeg(conf, bond[0], bond[1], bond[2], bond[3]))
-        return dihedrals
+        return []
 
     def _get_rotatable_bonds(self, molecule):
         raw_rot_bonds =  molecule.GetSubstructMatches(Chem.MolFromSmarts("[!#1]~[!$(*#*)&!D1]-!@[!$(*#*)&!D1]~[!#1]"))
@@ -67,9 +64,9 @@ class MolecularMCTS:
 
     def search(self, state, num_simulations):
         """
-        :param state: a tuple of (Mol object, list of processed dihedral angles) 
+        :param state: list of selected dihedral angles 
         :param num_simulations: the number of simulations to perform
-        :return: a state representing the minimal energy conformer
+        :return: a state with the updated selected dihedral angles
         """
         root_node = _Node(state, self._rotatable_bonds, self._allowed_angle_values, self._c)
 
@@ -88,27 +85,50 @@ class MolecularMCTS:
 
             # Rollout
             rollout_state = node.state
-            while len(rollout_state[1]) < self._num_angles:
+            while len(rollout_state) < self._num_angles:
                 rollout_state = self._select_next_move_randomly(rollout_state)
 
             # Backpropagate
             #   backpropagate from the expanded node and work back to the root node
-            energy = self._energy_function(rollout_state[0])
-            reward = self._get_reward(energy)
-            is_valid = self._is_valid_structure(rollout_state[0])
+            mol = self.get_mol_with_dihedrals(rollout_state)
+            # print("### rollout state: %s" % rollout_state)
+            energy = self._constrained_energy_function(mol)
+            # reward = self._get_reward(energy)
+            reward = 0.0
+            is_valid = self.is_valid_structure(mol)
+            if (self._global_minimum_energy is None or energy < self._global_minimum_energy) and is_valid:
+                self._global_minimum_energy = energy
+                reward = 1.0
+            reward = reward if is_valid else -1.0
+            print("energy: %s; reward: %s; is valid: %s" % (energy, reward, is_valid))
             while node is not None:
                 node.visits += 1
-                node.rewards.append(reward if is_valid else -1.0)
+                node.rewards.append(reward)
                 node = node.parent
 
         # return the move that was most visited
         most_visited_node = sorted(root_node.children, key = lambda c: c.visits)[-1]
         return most_visited_node.state
 
-    def _get_reward(self, energy):
-        return -(energy / (1 + np.abs(energy)))
+    def _constrained_energy_function(self, mol):
+        """
+        Accepts an rdkit Mol, optimizes the geometry, and returns the energy.
+        :param mol: an rdkit Mol
+        :return: the energy
+        """
+        mp = AllChem.MMFFGetMoleculeProperties(mol, mmffVariant="MMFF94")
+        ff = AllChem.MMFFGetMoleculeForceField(mol, mp)
+        for bond in self._rotatable_bonds:
+            ff.MMFFAddTorsionConstraint(bond[0], bond[1], bond[2], bond[3], True, -5, 5, 9999)
+        opt_fail = ff.Minimize(maxIts=1000,forceTol=0.0001,energyTol=1e-06)
+        energy = ff.CalcEnergy()
+        # print("### constrained dihedrals: %s" % self.get_dihedrals(mol))
+        return energy
 
-    def _is_valid_structure(self, mol):
+    # def _get_reward(self, energy):
+    #     return -energy
+
+    def is_valid_structure(self, mol):
         # checks if the stereochemistry of the molecule is conserved
         try:
             # somekind of bug here. Making the smiles from the mol object sometimes result in a wrong
@@ -142,14 +162,23 @@ class MolecularMCTS:
         return smiles
 
     def _select_next_move_randomly(self, state):
-        mol = Chem.Mol(state[0])  # create a copy of the Mol
+        return list(state) + [np.random.choice(self._allowed_angle_values)]
+
+    def get_mol_with_dihedrals(self, state):
+        molecule_copy = copy.deepcopy(self._original_mol)
+        mol = Chem.Mol(molecule_copy)  # create a copy of the Mol
         conf = mol.GetConformer()
-        bond_to_rotate = self._rotatable_bonds[len(state[1])]
-        theta = rdMolTransforms.GetDihedralDeg(conf, bond_to_rotate[0], bond_to_rotate[1], bond_to_rotate[2], bond_to_rotate[3])
-        theta += np.random.choice(self._allowed_angle_values)
-        rdMolTransforms.SetDihedralDeg(conf, bond_to_rotate[0], bond_to_rotate[1], bond_to_rotate[2], bond_to_rotate[3], theta)
+        for i, bond in enumerate(self._rotatable_bonds):
+            rdMolTransforms.SetDihedralDeg(conf, bond[0], bond[1], bond[2], bond[3], state[i])
         conformer_id = mol.AddConformer(conf, assignId=True)
-        return Chem.Mol(mol, False, conformer_id), state[1] + [theta]
+        return Chem.Mol(mol, False, conformer_id)
+
+    def get_dihedrals(self, mol):
+        conf = mol.GetConformer()
+        dihedrals = []
+        for bond in self._rotatable_bonds:
+            dihedrals.append(rdMolTransforms.GetDihedralDeg(conf, bond[0], bond[1], bond[2], bond[3]))
+        return dihedrals
 
 
 class _Node:
@@ -159,30 +188,16 @@ class _Node:
         self._c = c
         self._allowed_angle_values = allowed_angle_values
         self.rewards = []
-        self.visits = 0.0
+        self.visits = 0
         self.parent = parent
         self.children = []
         self.untried_moves = self._get_child_states()
 
     def _get_child_states(self):
         child_states = []
-        if len(self.state[1]) < len(self._rotatable_bonds):
-            mol = self.state[0]
-            conf = mol.GetConformer()
-            mol.AddConformer(conf, assignId=True)
-            bond_to_rotate = self._rotatable_bonds[len(self.state[1])]
-            theta = rdMolTransforms.GetDihedralDeg(conf, bond_to_rotate[0], bond_to_rotate[1], bond_to_rotate[2], bond_to_rotate[3])
+        if len(self.state) < len(self._rotatable_bonds):
             for allowed_angle_value in self._allowed_angle_values:
-                new_theta = theta + allowed_angle_value
-                rdMolTransforms.SetDihedralDeg(conf, bond_to_rotate[0], bond_to_rotate[1], bond_to_rotate[2], bond_to_rotate[3], new_theta)
-                mol.AddConformer(conf, assignId=True)
-            mol.RemoveConformer(conf.GetId())
-
-            for i, conf in enumerate(mol.GetConformers()):
-                theta = rdMolTransforms.GetDihedralDeg(conf, bond_to_rotate[0], bond_to_rotate[1], bond_to_rotate[2], bond_to_rotate[3])
-                child_mol = Chem.Mol(mol, False, conf.GetId())
-                child_states.append((child_mol, self.state[1] + [theta]))
-
+                child_states.append(list(self.state) + [allowed_angle_value])
         return child_states
 
     def _average_value(self):
@@ -216,7 +231,8 @@ class _Node:
     def ucb1(self):
         if self.visits == 0:
             return math.inf
-        # return self._average_value() + self._c*sqrt(log(self.parent.visits)/self.visits)
 
         prob = 1.0 / len(self._allowed_angle_values)  # equal probability for visiting each child node
         return self._average_value() + self._c*prob*(sqrt(self.parent.visits)/(1 + self.visits))
+
+        # return self._average_value() + self._c*sqrt(log(self.parent.visits)/self.visits)
