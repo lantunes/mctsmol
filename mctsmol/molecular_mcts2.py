@@ -12,17 +12,14 @@ import copy
 """
 Sequential MCTS, but state consists only of the best chosen dihedrals; we start from the 
 initial stored Mol when computing the energy for each simulation. When optimizing and computing the energy
-during a simulation, we freeze the dihedral angle to within +/- 5 degrees.
+during a simulation, we freeze the dihedral angle to within +/- 1 degree.
 """
 class MolecularMCTS2:
-    def __init__(self, allowed_angle_values, energy_function, energy_min, energy_max, c=sqrt(2)):
+    def __init__(self, allowed_angle_values, energy_function, c=sqrt(2)):
         self._allowed_angle_values = allowed_angle_values
         self._energy_function = energy_function
-        self._energy_min = energy_min
-        self._energy_max = energy_max
         self._c = c
         self._mol = None
-        self._global_minimum_energy = None
 
     def init_state(self, smiles_string):
         mol = Chem.MolFromSmiles(smiles_string)
@@ -93,12 +90,8 @@ class MolecularMCTS2:
             mol = self.get_mol_with_dihedrals(rollout_state)
             # print("### rollout state: %s" % rollout_state)
             energy = self._constrained_energy_function(mol)
-            # reward = self._get_reward(energy)
-            reward = 0.0
+            reward = self._get_reward(energy)
             is_valid = self.is_valid_structure(mol)
-            if (self._global_minimum_energy is None or energy < self._global_minimum_energy) and is_valid:
-                self._global_minimum_energy = energy
-                reward = 1.0
             reward = reward if is_valid else -1.0
             print("energy: %s; reward: %s; is valid: %s" % (energy, reward, is_valid))
             while node is not None:
@@ -119,14 +112,14 @@ class MolecularMCTS2:
         mp = AllChem.MMFFGetMoleculeProperties(mol, mmffVariant="MMFF94")
         ff = AllChem.MMFFGetMoleculeForceField(mol, mp)
         for bond in self._rotatable_bonds:
-            ff.MMFFAddTorsionConstraint(bond[0], bond[1], bond[2], bond[3], True, -5, 5, 9999)
+            ff.MMFFAddTorsionConstraint(bond[0], bond[1], bond[2], bond[3], True, -1, 1, 9999)
         opt_fail = ff.Minimize(maxIts=1000,forceTol=0.0001,energyTol=1e-06)
         energy = ff.CalcEnergy()
         # print("### constrained dihedrals: %s" % self.get_dihedrals(mol))
         return energy
 
-    # def _get_reward(self, energy):
-    #     return -energy
+    def _get_reward(self, energy):
+        return -(energy / (1 + np.abs(energy)))
 
     def is_valid_structure(self, mol):
         # checks if the stereochemistry of the molecule is conserved

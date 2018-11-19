@@ -10,9 +10,9 @@ from rdkit.Chem import MolFromPDBFile
 import copy
 
 """
-Continuous MCTS. Binary reward (1/0).
+Continuous MCTS. Reward squashed between -1 and 1, after subtracting energy of initial conformer.
 """
-class MolecularMCTS3f:
+class MolecularMCTS3g:
     def __init__(self, allowed_angle_values, energy_function, c=sqrt(2)):
         self._allowed_angle_values = allowed_angle_values
         self._energy_function = energy_function
@@ -36,6 +36,7 @@ class MolecularMCTS3f:
         self._num_angles = len(self._rotatable_bonds)
 
         print("initial MMFF94 energy: %s" % energy)
+        self._initial_energy = energy
         print("initial geometry: %s" % self.get_dihedrals(mol))
 
         self._original_smiles = self._get_smiles(mol)
@@ -89,18 +90,29 @@ class MolecularMCTS3f:
             #   backpropagate from the expanded node and work back to the root node
             mol = self.get_mol_with_dihedrals(rollout_state)
             energy = self._energy_function(mol)
-            reward = 0.0
             is_valid = self._is_valid_structure(mol)
+            reward = self._get_reward(energy, is_valid)
+            print("energy: %s; reward: %s; is valid: %s" % (energy, reward, is_valid))
             if (self._global_minimum_energy is None or energy < self._global_minimum_energy) and is_valid:
                 self._global_minimum_energy = energy
                 self._global_minimum_mol = mol
                 self._global_minimum_rollout_state = rollout_state
-                reward = 1.0
-            print("energy: %s; reward: %s; is valid: %s" % (energy, reward, is_valid))
             while node is not None:
                 node.visits += 1
                 node.rewards.append(reward)
                 node = node.parent
+
+    def _get_reward(self, energy, is_valid):
+        # if not is_valid:
+        #     return -1.0
+        # normalized_energy = energy - self._initial_energy
+        # return -(normalized_energy / (1 + np.abs(normalized_energy)))
+
+        if not is_valid:
+            return 0.0
+        normalized_energy = energy - self._initial_energy
+        r = -(normalized_energy / (1 + np.abs(normalized_energy)))
+        return (r + 1.)/2.
 
     def _is_valid_structure(self, mol):
         # checks if the stereochemistry of the molecule is conserved

@@ -3,12 +3,13 @@ from mctsmol import *
 if __name__ == '__main__':
     # allowed_angle_values = [0., 30., 60., 90., 120., 150., 180., -150., -120., -90., -60., -30.]
     allowed_angle_values = [0., 60., 120., 180., -120., -60.]
-    num_simulations = 4000
-    c = 3
+    num_simulations = 300
+    c = 50
     energy_function = mmff94_potential
 
     # mcts = MolecularMCTS3d(allowed_angle_values, energy_function, c=c)
-    mcts = MolecularMCTS3e(allowed_angle_values, energy_function, energy_min=-5., energy_max=32., c=c)
+    # mcts = MolecularMCTS3g(allowed_angle_values, energy_function, c=c)
+    mcts = MolecularMCTS3c(allowed_angle_values, energy_function, c=c)
 
     """
     - we can start with a randomly optimized structure, and just keep track of the lowest energy conformer
@@ -48,13 +49,13 @@ if __name__ == '__main__':
 
     # state = mcts.init_state("FCCCCF")
     # state = mcts.init_state("c1(Cc2ccc(C#C[C@@H](N(C(N)=O)O)C)s2)ccc(F)cc1")  # molecule_2 (-10.69833, d=6)
-    state = mcts.init_state("CCCCC[C@H](O)/C=C/[C@@H]1[C@@H](C/C=C\CCCC(O)=O)[C@@H]2C[C@H]1OO2")  # molecule_100 (-0.77875, d=14)
+    # state = mcts.init_state("CCCCC[C@H](O)/C=C/[C@@H]1[C@@H](C/C=C\CCCC(O)=O)[C@@H]2C[C@H]1OO2")  # molecule_100 (-0.77875, d=14)
     # state = mcts.init_state("COC1=CC(N)=C(Cl)C=C1C(=O)N[C@H]1CCN(C[C@H]1OC)CCCOC1C=CC(F)=CC=1")  # molecule_71 (80.29538, d=11)
     # state = mcts.init_state("CC(C)/N=C(\\N)/N=C(\\N)/NOCCCOC1C=CC(=CC=1Cl)OC(F)(F)F")  # molecule_96 (-130.98873, d=13)
     # state = mcts.init_state("CCCCCNC(=N)N/N=C/C1=CNC2C=CC(=CC1=2)OC") # molecule_70 (-44.19546, d=9)
     # state = mcts.init_state("COC1C=C(CNC(=O)CCCC/C=C/C(C)C)C=CC=1O") # molecule_69 (-4.64008, d=11)
     # state = mcts.init_state("CC(C)C1N=C(C(C)C)C(COC)=C(C=1/C=C/[C@@H](O)C[C@@H](O)CC(O)=O)C1C=CC(F)=CC=1") # molecule_98 (36.40735, d=14)
-    # state = mcts.init_state("CNCC[C@H](OC1C=CC(=CC=1)C(F)(F)F)C1C=CC=CC=1")  # molecule_57 (73.98046, d=7))
+    state = mcts.init_state("CNCC[C@H](OC1C=CC(=CC=1)C(F)(F)F)C1C=CC=CC=1")  # molecule_57 (73.98046, d=7))
 
     mcts.search(state, num_simulations)
 

@@ -4,12 +4,14 @@ import math
 import numpy as np
 
 
-class TorsionalMCTS:
+class TorsionalMCTSContinuous2:
     def __init__(self, num_angles, allowed_angle_values, energy_function, c=sqrt(2)):
         self._num_angles = num_angles
         self._allowed_angle_values = allowed_angle_values
         self._energy_function = energy_function
         self._c = c
+        self._global_minimum_energy = None
+        self._global_minimum_rollout_state = None
 
     def search(self, state, num_simulations):
         root_node = _Node(state, self._num_angles, self._allowed_angle_values, self._c)
@@ -35,17 +37,22 @@ class TorsionalMCTS:
             # Backpropagate
             #   backpropagate from the expanded node and work back to the root node
             energy = self._energy_function(rollout_state)
+            if self._global_minimum_energy is None or energy < self._global_minimum_energy:
+                self._global_minimum_energy = energy
+                self._global_minimum_rollout_state = rollout_state
             while node is not None:
                 node.visits += 1
                 node.energies.append(energy)
                 node = node.parent
 
-        # return the move that was most visited
-        most_visited_node = sorted(root_node.children, key = lambda c: c.visits)[-1]
-        return most_visited_node.state
-
     def _select_next_move_randomly(self):
         return np.random.choice(self._allowed_angle_values)
+
+    def get_best_conformer(self):
+        return self._global_minimum_rollout_state
+
+    def get_best_conformer_energy(self):
+        return self._global_minimum_energy
 
 
 class _Node:

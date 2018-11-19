@@ -3,9 +3,7 @@ from mctsmol import *
 if __name__ == '__main__':
     trials = 100
     num_simulations = 300
-    c = 100
-    energy_min = 50.
-    energy_max = 100.
+    c = 50
     best_energies = []
     for i in range(0, trials):
 
@@ -14,48 +12,64 @@ if __name__ == '__main__':
 
         energy_function = mmff94_potential
 
-        mcts = MolecularMCTS3e(allowed_angle_values, energy_function, energy_min=energy_min, energy_max=energy_max, c=c)
+        mcts = MolecularMCTS3c(allowed_angle_values, energy_function, c=c)
 
         """
         molecule_57 (73.98046)
         497/279936 -> 73.98046 (0.18%)
-          
-          c=sqrt(2), n=300, min=50., max=100., UCB1:
-            best energies mean: 74.00295
+          c=50, n=300, UCB1:
+            best energies mean: 73.99507
             best energies min: 73.98046
-            global min times found: 79/100
+            global min times found: 82/100
             run #2:
-            best energies mean: 74.01391
-            best energies min: 73.98046
-            global min times found: 71/100
-          c=sqrt(2), n=300, min=70., max=100., UCB1:
-            best energies mean: 74.00626
-            best energies min: 73.98046
-            global min times found: 72/100
-          c=5, n=300, min=50., max=100., PUCT:
-            best energies mean: 74.00394
+            best energies mean: 73.99964
             best energies min: 73.98046
             global min times found: 75/100
-          c=3, n=300, min=50., max=100., PUCT:
-            best energies mean: 74.00215
+            run #3:
+            best energies mean: 74.00615
             best energies min: 73.98046
-            global min times found: 75/100
-            run #2:
-            best energies mean: 73.99930
+            global min times found: 73/100
+            run #4:
+            best energies mean: 74.01312
+            best energies min: 73.98046
+            global min times found: 70/100
+          c=5, n=300, UCB1:
+            best energies mean: 74.01026
+            best energies min: 73.98046
+            global min times found: 70/100
+          c=100, n=300, UCB1:
+            best energies mean: 73.99720
             best energies min: 73.98046
             global min times found: 78/100
-          c=100, n=300, min=50., max=100., PUCT:
-            best energies mean: 74.00643
+          c=35, n=300, UCB1:
+            best energies mean: 74.00432
             best energies min: 73.98046
-            global min times found: 81/100
+            global min times found: 78/100
             run #2:
-            best energies mean: 74.00564
+            best energies mean: 74.01044
             best energies min: 73.98046
-            global min times found: 79/100
-          n=300, random selection instead of PUCT or UCB1:
-            best energies mean: 74.00798
+            global min times found: 70/100
+          c=150, n=300, UCB1:
+            best energies mean: 74.01181
             best energies min: 73.98046
-            global min times found: 68/100
+            global min times found: 69/100
+            
+          c=5, n=300, PUCT:
+            best energies mean: 74.04785
+            best energies min: 73.98046
+            global min times found: 55/100
+          c=35, n=300, PUCT:
+            best energies mean: 74.01060
+            best energies min: 73.98046
+            global min times found: 67/100
+          c=75, n=300, PUCT:
+            best energies mean: 74.01283
+            best energies min: 73.98046
+            global min times found: 71/100
+          c=100, n=300, PUCT:
+            best energies mean: 74.01437
+            best energies min: 73.98046
+            global min times found: 67/100
         """
 
         # state = mcts.init_state("FCCCCF")

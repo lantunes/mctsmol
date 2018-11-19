@@ -13,6 +13,15 @@ def simple_torsional_potential(angles):
     return sum
 
 
+def simple_torsional_potential_correlated(angles):
+    sum = 0.0
+    for angle in angles:
+        sum += 1 + np.cos(np.deg2rad(angle)) + np.cos(np.deg2rad(3 * angle))
+    if angles[0] == 60. and angles[-1] == 60.:
+        sum += -4.
+    return sum
+
+
 def uff_potential(mol):
     """
     Accepts an rdkit Mol, optimizes the geometry, and returns the energy.

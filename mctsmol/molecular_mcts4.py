@@ -5,14 +5,11 @@ import numpy as np
 from rdkit import Chem
 from rdkit.Chem import AllChem
 from rdkit.Chem import rdMolTransforms
-from rdkit.Chem import PDBWriter
-from rdkit.Chem import MolFromPDBFile
-import copy
 
 """
-Continuous MCTS. Binary reward (1/0).
+Continuous MCTS with a "rollout-expand" step instead of the usual "rollout".
 """
-class MolecularMCTS3f:
+class MolecularMCTS4:
     def __init__(self, allowed_angle_values, energy_function, c=sqrt(2)):
         self._allowed_angle_values = allowed_angle_values
         self._energy_function = energy_function
@@ -38,7 +35,7 @@ class MolecularMCTS3f:
         print("initial MMFF94 energy: %s" % energy)
         print("initial geometry: %s" % self.get_dihedrals(mol))
 
-        self._original_smiles = self._get_smiles(mol)
+        self._original_smiles = smiles_string
         self._original_mol = mol
         return []
 
@@ -48,11 +45,10 @@ class MolecularMCTS3f:
         raw_rot_bonds += molecule.GetSubstructMatches(Chem.MolFromSmarts("[*]~[*]-[NX3;H2]-[#1]"))
         bonds = []
         rot_bonds = []
-        for k,i,j,l in raw_rot_bonds:
-            if (i,j) not in bonds and (j,i) not in bonds: # makes sure that dihedrals are unique
+        for k, i, j, l in raw_rot_bonds:
+            if (i, j) not in bonds:
                 bonds.append((i,j))
-                rot_bonds.append((k,i,j,l))
-
+                rot_bonds.append((k, i, j, l))
         return rot_bonds
 
     def get_num_angles(self):
@@ -80,67 +76,28 @@ class MolecularMCTS3f:
                 move_state = node.select_untried_move()
                 node = node.add_child(move_state, self._rotatable_bonds, self._allowed_angle_values, self._c)
 
-            # Rollout
-            rollout_state = node.state
-            while len(rollout_state) < self._num_angles:
-                rollout_state = self._select_next_move_randomly(rollout_state)
+            # Rollout-Expand
+            while len(node.state) < self._num_angles:
+                move_state = node.select_untried_move()
+                node = node.add_child(move_state, self._rotatable_bonds, self._allowed_angle_values, self._c)
 
             # Backpropagate
             #   backpropagate from the expanded node and work back to the root node
+            rollout_state = list(node.state)
             mol = self.get_mol_with_dihedrals(rollout_state)
             energy = self._energy_function(mol)
-            reward = 0.0
-            is_valid = self._is_valid_structure(mol)
-            if (self._global_minimum_energy is None or energy < self._global_minimum_energy) and is_valid:
+            print(energy)
+            if self._global_minimum_energy is None or energy < self._global_minimum_energy:
                 self._global_minimum_energy = energy
                 self._global_minimum_mol = mol
                 self._global_minimum_rollout_state = rollout_state
-                reward = 1.0
-            print("energy: %s; reward: %s; is valid: %s" % (energy, reward, is_valid))
             while node is not None:
                 node.visits += 1
-                node.rewards.append(reward)
+                node.energies.append(energy)
                 node = node.parent
 
-    def _is_valid_structure(self, mol):
-        # checks if the stereochemistry of the molecule is conserved
-        try:
-            # somekind of bug here. Making the smiles from the mol object sometimes result in a wrong
-            # stereochemistry, but writing to a pdb file and the reading it produces the correct result
-            # this is a hack that should be fixed
-            temp_pdb_name = 'isvalid_temp.pdb'
-            self._write_pdb(mol, temp_pdb_name)
-            temp_mol = MolFromPDBFile(temp_pdb_name)
-            test_smiles = self._get_smiles(temp_mol)
-            if self._original_smiles != test_smiles:
-                return False
-        except:
-            # this is need to prevent rdkit from crashing if it cant understand the molecule
-            print("WARNING: can't understand molecule")
-            return False
-        return True
-
-    def _write_pdb(self, molecule, filename):
-        w = PDBWriter('./'+filename)
-        w.write(molecule)
-
-    def _get_smiles(self, molecule):
-        molecule_copy = copy.deepcopy(molecule)
-        test_molecule = Chem.Mol(molecule_copy)
-        test_molecule = Chem.RemoveHs(test_molecule)
-        Chem.SanitizeMol(test_molecule)
-        Chem.DetectBondStereochemistry(test_molecule,-1)
-        Chem.AssignStereochemistry(test_molecule, flagPossibleStereoCenters=True, force=True)
-        Chem.AssignAtomChiralTagsFromStructure(test_molecule,-1)
-        smiles = Chem.MolToSmiles(test_molecule, isomericSmiles=True)
-        return smiles
-
-    def _select_next_move_randomly(self, state):
-        return list(state) + [np.random.choice(self._allowed_angle_values)]
-
     def get_mol_with_dihedrals(self, state):
-        molecule_copy = copy.deepcopy(self._original_mol)
-        mol = Chem.Mol(molecule_copy)  # create a copy of the Mol
+        mol = Chem.Mol(self._original_mol)  # create a copy of the Mol
         conf = mol.GetConformer()
         for i, bond in enumerate(self._rotatable_bonds):
             rdMolTransforms.SetDihedralDeg(conf, bond[0], bond[1], bond[2], bond[3], state[i])
@@ -170,7 +127,7 @@ class _Node:
         self._rotatable_bonds = rotatable_bonds
         self._c = c
         self._allowed_angle_values = allowed_angle_values
-        self.rewards = []
+        self.energies = []
         self.visits = 0.0
         self.parent = parent
         self.children = []
@@ -184,7 +141,7 @@ class _Node:
         return child_states
 
     def _average_value(self):
-        return np.sum(self.rewards) / self.visits
+        return -np.mean(self.energies)
 
     def has_untried_moves(self):
         return self.untried_moves != []
@@ -214,8 +171,4 @@ class _Node:
     def ucb1(self):
         if self.visits == 0:
             return math.inf
-
-        # prob = 1.0 / len(self._allowed_angle_values)  # equal probability for visiting each child node
-        # return self._average_value() + self._c*prob*(sqrt(self.parent.visits)/(1 + self.visits))
-
         return self._average_value() + self._c*sqrt(log(self.parent.visits)/self.visits)

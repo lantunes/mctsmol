@@ -10,7 +10,7 @@ from rdkit.Chem import MolFromPDBFile
 import copy
 
 """
-Continuous MCTS.
+Continuous MCTS. Reward squashed between -1 and 1.
 """
 class MolecularMCTS3d:
     def __init__(self, allowed_angle_values, energy_function, c=sqrt(2)):

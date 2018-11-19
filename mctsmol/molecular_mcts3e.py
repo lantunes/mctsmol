@@ -10,7 +10,7 @@ from rdkit.Chem import MolFromPDBFile
 import copy
 
 """
-Continuous MCTS.
+Continuous MCTS. Reward normalized between 0 and 1, with pre-specified min and max energies.
 """
 class MolecularMCTS3e:
     def __init__(self, allowed_angle_values, energy_function, energy_min, energy_max, c=sqrt(2)):
